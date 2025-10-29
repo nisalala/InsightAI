@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navbar from "../components/NavBar";
 import Sidebar from "../components/SideBar";
 import DatabaseSetupPrompt from "../components/DatabaseSetupPrompt";
@@ -8,8 +8,40 @@ import ChatInput from "../components/ChatInput";
 import ChatMessage from "../components/ChatMessage";
 import DatabaseOverviewPage from "../pages/DatabaseOverview";
 import { Database, Loader2 } from "lucide-react";
+import { supabase } from "../supabaseClient";
+import axios from "axios";
 
 const DashboardPage = () => {
+  // fetch user
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+
+      if (error || !currentUser) {
+        console.error("Failed to get Supabase user:", error);
+        return;
+      }
+
+      console.log("Supabase user:", currentUser);
+      setUser(currentUser);
+
+      // Sync with backend using email
+      try {
+        const res = await axios.post("http://localhost:5000/api/users/sync", {
+          email: currentUser.email,
+          name: currentUser.user_metadata?.full_name || currentUser.email,
+        });
+        console.log("Backend user synced:", res.data);
+      } catch (err) {
+        console.error("Failed to sync user with backend:", err);
+      }
+    };
+
+    getUser();
+  }, []);
+
   // DB config
   const [dbConfig, setDbConfig] = useState(() => {
     const stored = localStorage.getItem("dbConfig");
@@ -18,6 +50,7 @@ const DashboardPage = () => {
   const [dbSummary, setDbSummary] = useState(null);
   const [analyzingDatabase, setAnalyzingDatabase] = useState(false);
   const [showDbModal, setShowDbModal] = useState(false);
+  const [loadingDb, setLoadingDb] = useState(true);
 
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -40,18 +73,14 @@ const DashboardPage = () => {
   const [activeActivityId, setActiveActivityId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 💾 Save DB config and start analysis
-  const handleSaveDbConfig = (config) => {
-    setDbConfig(config);
-    localStorage.setItem("dbConfig", JSON.stringify(config));
-    setShowDbModal(false);
-
-    // Start analyzing database
+  // 🔥 NEW: Function to analyze database
+  const analyzeDatabase = (connectionString) => {
     setAnalyzingDatabase(true);
 
-    // Simulate API call
+    // Simulate API call - replace with real API call
     setTimeout(() => {
       const mockSummary = {
+        connectionString, // ✅ Store connection string
         stats: {
           total_tables: 12,
           total_rows: 45630,
@@ -113,6 +142,56 @@ const DashboardPage = () => {
       setActiveView("overview");
     }, 3000);
   };
+
+  // 🔥 Fetch DB config on mount
+  useEffect(() => {
+    const fetchDbConfig = async () => {
+      if (!user?.email) return;
+
+      try {
+        const res = await axios.get(`http://localhost:5000/api/users/${user.email}/database`);
+        
+        if (res.data?.databaseAPI) {
+          const config = { connectionString: res.data.databaseAPI };
+          setDbConfig(config);
+          localStorage.setItem("dbConfig", JSON.stringify(config));
+          
+          // ✅ Trigger analysis if we have a connection string
+          analyzeDatabase(res.data.databaseAPI);
+        } else {
+          setShowDbModal(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch DB API from backend:", error);
+        setShowDbModal(true);
+      } finally {
+        setLoadingDb(false);
+      }
+    };
+
+    fetchDbConfig();
+  }, [user]);
+
+  // 💾 Save DB config and start analysis
+  // 💾 Save DB config and start analysis
+const handleSaveDbConfig = async (connectionString) => {
+  if (!connectionString || !user?.email) return;
+
+  try {
+    // Save to backend (already done in modal, but we can skip this duplicate call)
+    // The modal already saves it, so we just need to handle the analysis
+    
+    const config = { connectionString };
+    setDbConfig(config);
+    localStorage.setItem("dbConfig", JSON.stringify(config));
+
+    // ✅ Always trigger analysis when config is saved/updated
+    analyzeDatabase(connectionString);
+  } catch (err) {
+    console.error("Failed to process database configuration:", err);
+    alert("Failed to analyze database");
+  }
+};
 
   // 💬 Send chat messages
   const handleSendMessage = (message) => {
@@ -176,7 +255,6 @@ const DashboardPage = () => {
     }, 1500);
   };
 
- 
   // 📜 Handle activity click
   const handleActivityClick = (activity) => {
     const existingReport = openReports.find((r) => r.id === activity.reportId);
@@ -184,7 +262,7 @@ const DashboardPage = () => {
     setActiveActivityId(activity.id);
     setSidebarOpen(false);
     setCanvasExpanded(false);
-    setActiveView("chat"); // Show chat when clicking activity
+    setActiveView("chat");
   };
 
   const currentReport = openReports.find((r) => r.id === activeReportId);
@@ -196,7 +274,7 @@ const DashboardPage = () => {
       {
         role: "assistant",
         content:
-          'Hello! Let’s start a new conversation. You can ask me anything like "Show me monthly revenue trends".',
+          "Hello! Let's start a new conversation. You can ask me anything like 'Show me monthly revenue trends'",
       },
     ]);
     setOpenReports([]);
@@ -207,7 +285,16 @@ const DashboardPage = () => {
 
   // ⚙️ Conditional Rendering
 
-  // Analyzing
+  // Loading DB config
+  if (loadingDb) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  // Analyzing database
   if (analyzingDatabase) {
     return (
       <div className="h-screen flex items-center justify-center bg-white">
@@ -230,12 +317,19 @@ const DashboardPage = () => {
     );
   }
 
-  //Database overview
-  if (activeView==="overview" && dbSummary) {
-    return <DatabaseOverviewPage dbSummary={dbSummary} onContinue={() => setActiveView("chat")} activeView={activeView} onChatClick={()=>setActiveView("chat")}/>;
+  // Database overview
+  if (activeView === "overview" && dbSummary) {
+    return (
+      <DatabaseOverviewPage
+        dbSummary={dbSummary}
+        onContinue={() => setActiveView("chat")}
+        activeView={activeView}
+        onChatClick={() => setActiveView("chat")}
+      />
+    );
   }
 
-  // DB setup mode
+  // No DB config - show setup prompt
   if (!dbConfig) {
     return (
       <div className="h-screen flex flex-col">
@@ -245,6 +339,7 @@ const DashboardPage = () => {
           isOpen={showDbModal}
           onClose={() => setShowDbModal(false)}
           onSave={handleSaveDbConfig}
+          userEmail={user?.email}
         />
       </div>
     );
@@ -259,8 +354,8 @@ const DashboardPage = () => {
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
           onSettingsClick={() => setShowDbModal(true)}
           onOverviewClick={() => setActiveView("overview")}
-          onChatClick={()=> setActiveView("chat")}
-          hasOverview={dbSummary !== null}
+          onChatClick={() => setActiveView("chat")}
+          hasOverview={dbSummary !== null} // ✅ Will be true after analysis
           activeView={activeView}
         />
       </div>
@@ -299,7 +394,6 @@ const DashboardPage = () => {
           <ChatInput onSend={handleSendMessage} disabled={loading} />
         </div>
 
-          
         {/* Canvas */}
         {openReports.length > 0 && (
           <Canvas
@@ -322,7 +416,7 @@ const DashboardPage = () => {
         isOpen={showDbModal}
         onClose={() => setShowDbModal(false)}
         onSave={handleSaveDbConfig}
-        initialConfig={dbConfig}
+        userEmail={user?.email}
       />
     </div>
   );

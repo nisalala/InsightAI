@@ -1,16 +1,41 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Database, Layers, Table, Activity, Sparkles, ChevronRight, Info, ArrowRight } from "lucide-react";
 import Navbar from "../components/NavBar";
-import { useState } from "react";
 
-const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick }) => {
-    
+const DatabaseOverviewPage = ({ dbSummary, onContinue, activeView, onChatClick }) => {
+  const [databaseData, setDatabaseData] = useState(dbSummary || null); // fallback to dbSummary if provided
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const databaseAPI = dbSummary?.connectionString;
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!databaseAPI) return;
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const res = await axios.post("http://127.0.0.1:5001/generate-insights", {
+          database_api: databaseAPI
+        });
+        setDatabaseData(res.data);
+      } catch (err) {
+        setError(err.response?.data?.detail || "Failed to fetch insights");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [databaseAPI]);
+
   return (
     <div className="min-h-screen bg-gray-50">
-         <Navbar 
-        activeView={activeView} 
-        onChatClick={onChatClick} 
-      />
+      <Navbar activeView={activeView} onChatClick={onChatClick} />
+
       <div className="max-w-7xl mx-auto px-8 py-12">
         {/* Header */}
         <div className="mb-8">
@@ -25,6 +50,10 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
           </div>
         </div>
 
+        {/* Loading/Error */}
+        {loading && <p className="text-gray-600 mb-4">Loading insights...</p>}
+        {error && <p className="text-red-500 mb-4">{error}</p>}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
@@ -32,7 +61,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
               <Layers className="w-5 h-5 text-teal-600" />
               <span className="text-sm font-medium text-gray-600">Total Tables</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900">{dbSummary?.stats?.total_tables || 0}</div>
+            <div className="text-3xl font-bold text-gray-900">{databaseData?.stats?.total_tables || 0}</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
@@ -40,7 +69,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
               <Table className="w-5 h-5 text-cyan-600" />
               <span className="text-sm font-medium text-gray-600">Total Rows</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900">{dbSummary?.stats?.total_rows?.toLocaleString() || 0}</div>
+            <div className="text-3xl font-bold text-gray-900">{databaseData?.stats?.total_rows?.toLocaleString() || 0}</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
@@ -48,7 +77,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
               <Activity className="w-5 h-5 text-purple-600" />
               <span className="text-sm font-medium text-gray-600">Columns</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900">{dbSummary?.stats?.total_columns || 0}</div>
+            <div className="text-3xl font-bold text-gray-900">{databaseData?.stats?.total_columns || 0}</div>
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
@@ -56,19 +85,19 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
               <Database className="w-5 h-5 text-emerald-600" />
               <span className="text-sm font-medium text-gray-600">Database Size</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900">{dbSummary?.stats?.size || 'N/A'}</div>
+            <div className="text-3xl font-bold text-gray-900">{databaseData?.stats?.size || 'N/A'}</div>
           </div>
         </div>
 
         {/* Key Insights */}
-        {dbSummary?.insights && dbSummary.insights.length > 0 && (
+        {databaseData?.insights && databaseData.insights.length > 0 && (
           <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-6 border border-teal-200 mb-8">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-5 h-5 text-teal-600" />
               <h2 className="text-xl font-semibold text-gray-900">Key Insights</h2>
             </div>
             <div className="grid gap-3">
-              {dbSummary.insights.map((insight, i) => (
+              {databaseData.insights.map((insight, i) => (
                 <div key={i} className="flex items-start gap-3 bg-white rounded-lg p-4">
                   <ChevronRight className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
                   <p className="text-gray-700">{insight}</p>
@@ -88,7 +117,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
           </div>
           <div className="p-6">
             <div className="grid gap-4">
-              {dbSummary?.tables && dbSummary.tables.map((table, i) => (
+              {databaseData?.tables && databaseData.tables.map((table, i) => (
                 <div key={i} className="border border-gray-200 rounded-lg p-4 hover:border-teal-300 transition-colors">
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -119,7 +148,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
         </div>
 
         {/* Suggested Queries */}
-        {dbSummary?.suggested_queries && dbSummary.suggested_queries.length > 0 && (
+        {databaseData?.suggested_queries && databaseData.suggested_queries.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -129,7 +158,7 @@ const DatabaseOverviewPage = ({ dbSummary, onContinue,activeView, onChatClick })
             </div>
             <div className="p-6">
               <div className="grid gap-3">
-                {dbSummary.suggested_queries.map((query, i) => (
+                {databaseData.suggested_queries.map((query, i) => (
                   <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <ChevronRight className="w-4 h-4 text-teal-600" />

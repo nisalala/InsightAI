@@ -8,12 +8,14 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  name      String?
-  createdAt DateTime  @default(now())
-  activities Activity[]
+  id              String     @id @default(uuid())
+  email           String     @unique
+  name            String?
+  createdAt       DateTime   @default(now())
+  databaseAPI     String?    // 👈 new optional field
+  activities      Activity[]
 }
+
 
 model Activity {
   id          String   @id @default(uuid())

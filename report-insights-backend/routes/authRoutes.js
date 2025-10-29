@@ -1,61 +1,38 @@
-// routes/authRoutes.js
+// POST /api/auth/sync
 import express from "express";
-import { supabase } from "../supabaseClient.js";
 import { PrismaClient } from "@prisma/client";
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Sign up
-router.post("/signup", async (req, res) => {
-  const { email, password, name } = req.body;
+// router.post("/sync", async (req, res) => {
+//   const { email, name } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
-  }
+//   if (!email) {
+//     return res.status(400).json({ error: "supabaseId and email required" });
+//   }
 
-  try {
-    // Create user in Supabase auth
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true, // auto confirm email
-    });
+//   try {
+//     let user = await prisma.user.findUnique({ where: { id: supabaseId } });
 
-    if (error) return res.status(400).json({ error: error.message });
+//     if (!user) {
+//       user = await prisma.user.create({
+//         data: {
+//           id: supabaseId,
+//           email,
+//           name: name || null,
+//         },
+//       });
+//       console.log("✅ New user created in backend:", supabaseId);
+//     } else {
+//       console.log("⚡ User already exists in backend:", supabaseId);
+//     }
 
-    // Create user in Prisma database
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name: name || null,
-      },
-    });
-
-    res.status(201).json({ user, supabaseId: data.id });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Signup failed" });
-  }
-});
-
-// Sign in
-router.post("/signin", async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) return res.status(400).json({ error: error.message });
-
-    res.status(200).json({ user: data.user, session: data.session });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Signin failed" });
-  }
-});
+//     res.json(user);
+//   } catch (error) {
+//     console.error("❌ Error syncing user:", error);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
 export default router;
